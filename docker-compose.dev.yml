@@ -1,0 +1,56 @@
+# =============================================================================
+# Overlay de developpement
+# Usage : docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# (via `make dev` — ne pas utiliser directement)
+# =============================================================================
+services:
+
+  # ---------------------------------------------------------------------------
+  # Surcharge de l'API : hot-reload + volume source + connexion Mailpit
+  # ---------------------------------------------------------------------------
+  api:
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
+    volumes:
+      - ./src:/app/src:ro
+    environment:
+      - ENVIRONMENT=development
+      - MAIL_SERVER=mailpit
+      - MAIL_PORT=${MAIL_PORT}
+      - WEB_CONCURRENCY=1
+      - PYTHONDONTWRITEBYTECODE=1
+    depends_on:
+      mailpit:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
+  # Mailpit — intercepte tous les mails sans les envoyer reellement
+  # SMTP : localhost:1025  |  UI : http://localhost:8025
+  # ---------------------------------------------------------------------------
+  mailpit:
+    # Verifier la derniere version : https://github.com/axllent/mailpit/releases
+    image: axllent/mailpit:v1.21.0
+    ports:
+      - "${MAIL_PORT}:1025"
+      - "8025:8025"
+    environment:
+      - MP_MAX_MESSAGES=500
+    restart: unless-stopped
+    networks:
+      - external
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — port expose en dev uniquement pour les clients de bureau
+  # Connexion : localhost:5432  |  User : myapp  |  DB : myapp
+  # Clients recommandes : DBeaver, TablePlus, pgAdmin desktop, psql
+  # ---------------------------------------------------------------------------
+  postgres:
+    ports:
+      - "127.0.0.1:${DB_PORT}:5432"
+
+  # ---------------------------------------------------------------------------
+  # Redis — expose en dev pour inspection (redis-cli localhost:6379)
+  # ---------------------------------------------------------------------------
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+

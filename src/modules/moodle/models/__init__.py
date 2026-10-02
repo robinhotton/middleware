@@ -1,0 +1,41 @@
+"""Schemas Pydantic du domaine Moodle."""
+
+from .schemas import (
+    LearnerLevel,
+    LearnerProfile,
+    MoodleActivityEvent,
+    MoodleAssignment,
+    MoodleBadge,
+    MoodleCalendarEvent,
+    MoodleCompletion,
+    MoodleCourse,
+    MoodleCourseGrade,
+    MoodleForumPost,
+    MoodleGradeItem,
+    MoodleQuizAttempt,
+    MoodleQuizQuestion,
+    MoodleQuizReview,
+    MoodleResource,
+    MoodleUserPreference,
+    MoodleUserRole,
+)
+
+__all__ = [
+    "LearnerLevel",
+    "LearnerProfile",
+    "MoodleActivityEvent",
+    "MoodleAssignment",
+    "MoodleBadge",
+    "MoodleCalendarEvent",
+    "MoodleCompletion",
+    "MoodleCourse",
+    "MoodleCourseGrade",
+    "MoodleForumPost",
+    "MoodleGradeItem",
+    "MoodleQuizAttempt",
+    "MoodleQuizQuestion",
+    "MoodleQuizReview",
+    "MoodleResource",
+    "MoodleUserPreference",
+    "MoodleUserRole",
+]

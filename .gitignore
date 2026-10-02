@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Linting / formatting
+.ruff_cache/
+
+# Type checking
+.mypy_cache/
+
+# Database
+database.db
+
+# Secrets et environnement
+.env
+.env.*
+!.env.base
+!.env.dev
+!.env.prod
+secrets/
+
+# Logs
+*.log
+
+# Rapports d'audit
+result-audit.md

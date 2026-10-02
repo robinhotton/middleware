@@ -1,0 +1,27 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.git/
+.gitignore
+.editorconfig
+database.db
+tests/
+.claude
+Makefile
+README.md
+CLAUDE.md
+.env
+.env.*
+secrets/
+init/
+docker-compose*.yml
+.dockerignore
+.claude/
+.vscode/
+.idea/
+*.log
+
+# perso
+*audit*

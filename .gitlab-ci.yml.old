@@ -1,0 +1,96 @@
+stages:
+  - test
+  - audit
+
+audit-deps:
+  stage: audit
+  image: python:3.13-slim
+  before_script:
+    - pip install --upgrade pip -q
+    - pip install pip-audit -q
+    - pip install -e "." -q
+  script:
+    # Audit des dependances du projet (echec si CVE detectee)
+    - pip-audit --skip-editable
+  allow_failure: false
+
+test:
+  stage: test
+  image: python:3.13-slim
+  variables:
+    # ─── Application ────────────────────────────────────────────────────────
+    APP_NAME: "Test App"
+    APP_DESCRIPTION: "API REST FastAPI — tests"
+    APP_VERSION: "0.0.0"
+    ENVIRONMENT: "development"
+    DEBUG: "False"
+    # ─── Serveur ────────────────────────────────────────────────────────────
+    HOST: "127.0.0.1"
+    PORT: "8000"
+    API_PREFIX: "/api/v1"
+    ALLOWED_ORIGINS: '["http://localhost:8000"]'
+    # ─── JWT (cles generees dynamiquement dans before_script) ───────────────
+    JWT_ALGORITHM: "RS256"
+    JWT_EXPIRATION_MINUTES: "60"
+    # ─── Compte admin ────────────────────────────────────────────────────────
+    ADMIN_EMAIL: "admin@test.local"
+    ADMIN_PASSWORD: "TestAdmin@2025!"
+    ADMIN_PSEUDO: "Admin"
+    # ─── Base de donnees (SQLite — pas de service externe requis) ─────────────
+    DB_DRIVER: "sqlite"
+    DB_HOST: "localhost"
+    DB_PORT: "5432"
+    DB_USER: "test"
+    DB_PASSWORD: "test"
+    DB_NAME: "test"
+    DB_ECHO: "False"
+    DB_POOL_SIZE: "5"
+    DB_MAX_OVERFLOW: "10"
+    # ─── Redis (vide = in-memory, ok avec 1 worker) ──────────────────────────
+    REDIS_URL: ""
+    # ─── Securite ────────────────────────────────────────────────────────────
+    FAILED_LOGIN_THRESHOLD: "5"
+    LOCKOUT_DURATIONS_MINUTES: "[5,30,120]"
+    EMAIL_VERIFICATION_EXPIRY_MINUTES: "10"
+    RESET_TOKEN_EXPIRY_MINUTES: "10"
+    TOKEN_BYTES: "32"
+    # ─── Mail (envoi supprime) ────────────────────────────────────────────────
+    MAIL_USERNAME: ""
+    MAIL_PASSWORD: ""
+    MAIL_FROM: "noreply@test.local"
+    MAIL_FROM_NAME: "Test App"
+    MAIL_SERVER: "localhost"
+    MAIL_PORT: "1025"
+    MAIL_STARTTLS: "False"
+    MAIL_SSL_TLS: "False"
+    MAIL_SUPPRESS_SEND: "True"
+    APP_BASE_URL: "http://localhost:8000"
+    # ─── LLM — appels moques en tests, cle factice suffisante ────────────────
+    MISTRAL_MODEL: "mistral-small-latest"
+    MISTRAL_MODEL_LIGHT: "open-mistral-7b"
+    MISTRAL_BASE_URL: "https://api.mistral.ai/v1"
+    MISTRAL_MAX_TOKENS: "800"
+    PLATFORM_POLICIES: ""
+    # ─── Moodle — appels moques en tests ─────────────────────────────────────
+    MOODLE_BASE_URL: "https://moodle.test.local"
+    MOODLE_SERVICE_NAME: "moodle_mobile_app"
+    MOODLE_CACHE_TTL_SECONDS: "300"
+    # ─── OpenAPI contact ──────────────────────────────────────────────────────
+    CONTACT_NAME: ""
+    CONTACT_URL: ""
+    CONTACT_EMAIL: ""
+    # ─── Logging ─────────────────────────────────────────────────────────────
+    LOG_LEVEL: "WARNING"
+    LOG_DIR: ""
+    # ─── Secrets injectes via GitLab CI/CD Variables (masquees) ──────────────
+    # MISTRAL_API_KEY        → variable GitLab masquee
+    # MOODLE_ADMIN_TOKEN     → variable GitLab masquee
+    # MOODLE_WEBHOOK_SECRET  → variable GitLab masquee
+  before_script:
+    - pip install -e ".[dev]" -q
+    - openssl genrsa -traditional -out /tmp/jwt_private.pem 2048
+    - openssl rsa -in /tmp/jwt_private.pem -pubout -out /tmp/jwt_public.pem
+    - export JWT_PRIVATE_KEY="$(cat /tmp/jwt_private.pem)"
+    - export JWT_PUBLIC_KEY="$(cat /tmp/jwt_public.pem)"
+  script:
+    - pytest tests/ -v

@@ -1,0 +1,218 @@
+services:
+  # ==========================================================================
+  # FastAPI Application
+  # ==========================================================================
+  api:
+    build: .
+    # Pas de surcharge de command ici : le CMD du Dockerfile est utilise (sans --reload)
+    # Le fichier docker-compose.dev.yml surcharge cette section pour le developpement
+    ports:
+      - "${PORT}:8000"
+    env_file: .env
+    environment:
+      # Valeurs Docker-specifiques qui surchargent le .env local
+      - HOST=0.0.0.0 # Docker : ecoute sur toutes les interfaces (local : 127.0.0.1)
+      - DB_DRIVER=postgresql # Docker : PostgreSQL (local : sqlite)
+      - DB_HOST=postgres # Docker : hostname reseau interne (local : n/a)
+      - LOG_DIR=/app/logs # Docker : volume dedie (local : pas de /app/logs)
+      - REDIS_URL=redis://redis:6379
+      - TZ=Europe/Paris # Timezone pour les timestamps des logs
+    secrets:
+      - db_password
+      - brevo_smtp_key
+      - jwt_private_key
+      - jwt_public_key
+      - admin_password
+      - mistral_api_key
+      - moodle_admin_token
+      - moodle_webhook_secret
+    volumes:
+      - api_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+          pids: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - external
+      - internal
+
+  # ==========================================================================
+  # Adminer 5.4.2 — Interface web PostgreSQL (acces localhost uniquement)
+  # CVE Docker Scout : 0C 9H 9M 2L — seule option fonctionnelle disponible
+  # Connexion read-only : user=DB_READONLY_USER (SELECT seul, ecriture bloquee en DB)
+  # ==========================================================================
+  adminer:
+    image: adminer:5.4.2
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DEFAULT_DB_DRIVER=pgsql
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+          pids: 50
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - internal
+
+  # ==========================================================================
+  # PostgreSQL — Chainguard/Wolfi (0 CVE verifie Docker Scout)
+  # Pas de gosu : le C/H golang/stdlib disparait. Socket dans /tmp.
+  # Image epinglee par digest SHA256 (seul pinning fiable sur le tier gratuit).
+  # ==========================================================================
+  postgres:
+    image: cgr.dev/chainguard/postgres:latest@sha256:89375aa12a6c17fd7f01600da0f01ba30517178e18b707e09e6a97892d577eda
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - DB_READONLY_USER=${DB_READONLY_USER}
+    secrets:
+      - db_password
+      - db_readonly_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m # socket + fichiers temp (Chainguard utilise /tmp)
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN # chown du volume de donnees au demarrage
+      - DAC_OVERRIDE # acces aux fichiers du data dir
+      - SETGID # passage au groupe postgres pour l'init
+      - SETUID # passage a l'utilisateur postgres pour l'init
+      - FOWNER # chmod sur le data dir
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+          pids: 200
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+
+  # ==========================================================================
+  # Redis — backend du rate limiter (partage entre workers Gunicorn)
+  # ==========================================================================
+  redis:
+    # Verifier la derniere version patch : https://hub.docker.com/_/redis/tags?name=7.4
+    image: redis:7.4.1-alpine
+    user: redis
+    command: redis-server --save "" --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 96M
+          pids: 50
+    networks:
+      - internal
+
+# ============================================================================
+# Secrets (fichiers locaux, jamais commites dans git)
+# ============================================================================
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  db_readonly_password:
+    file: ./secrets/db_readonly_password.txt
+  brevo_smtp_key:
+    file: ./secrets/brevo_smtp_key.txt
+  jwt_private_key:
+    file: ./secrets/jwt_private_key.txt
+  jwt_public_key:
+    file: ./secrets/jwt_public_key.txt
+  admin_password:
+    file: ./secrets/admin_password.txt
+  mistral_api_key:
+    file: ./secrets/mistral_api_key.txt
+  moodle_admin_token:
+    file: ./secrets/moodle_admin_token.txt
+  moodle_webhook_secret:
+    file: ./secrets/moodle_webhook_secret.txt
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  external:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  postgres_data:
+  api_logs:
+  redis_data:
